@@ -24,6 +24,10 @@
   import { IS_MOBILE } from "@/constants";
   import { get, has, set } from "tauri-plugin-cache-api";
   import { ScrollingValue } from "svelte-ux";
+  import { open as openFile } from "@tauri-apps/plugin-dialog";
+  import { readTextFile } from "@tauri-apps/plugin-fs";
+  import { toast } from "svelte-sonner";
+  import Icon from "@iconify/svelte";
 
   let libraryDiv: HTMLDivElement = $state(null!);
   let libdivWidth: number = $state(0);
@@ -39,6 +43,75 @@
           .slice((page - 1) * perPage, page * perPage),
   );
   const siblingCount = 1;
+
+  async function importMalXml() {
+    const file = await openFile({
+      title: "Select MAL XML export",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "MAL XML", extensions: ["xml"] }],
+    });
+    if (!file) return;
+    const content = await readTextFile(file as string);
+    const doc = new DOMParser().parseFromString(content, "application/xml");
+    const mangas = Array.from(doc.getElementsByTagName("manga"));
+    const statusMap: Record<string, string> = {
+      "1": "reading",
+      "2": "completed",
+      "3": "on hold",
+      "4": "dropped",
+      "6": "plan to read",
+    };
+    let added = 0;
+    for (const m of mangas) {
+      const title = m.getElementsByTagName("series_title")[0]?.textContent?.trim();
+      const malId = m
+        .getElementsByTagName("series_animedb_id")[0]
+        ?.textContent?.trim();
+      if (!title || !malId) continue;
+      const grade = Number(
+        m.getElementsByTagName("my_score")[0]?.textContent || 0,
+      );
+      const status =
+        statusMap[m.getElementsByTagName("my_status")[0]?.textContent || ""] ??
+        "";
+      const favorite: Favorite = {
+        id: 0,
+        name: title,
+        folder_name: title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, ""),
+        link: `https://myanimelist.net/manga/${malId}`,
+        cover: "/myk.png",
+        source: "mal",
+        source_id: malId,
+        type: "manga",
+        extra_name: "",
+        title_color: "",
+        card_color: "",
+        grade,
+        author: "Unknown",
+        description: "",
+        status,
+        mal_id: malId,
+        anilist_id: "",
+      };
+      try {
+        await FavoriteDB.createFavorite(favorite);
+        added++;
+      } catch (e) {
+        console.log(e);
+      }
+    }
+    if (added > 0) {
+      const newFavorites = await FavoriteDB.getLibraryFavorites();
+      libraryFavorites.set(newFavorites);
+      toast.success(`Imported ${added} favorites from MAL`);
+    } else {
+      toast.error("No favorites imported");
+    }
+  }
 
   async function loadImage(cover: string, url: string) {
     $coversLoaded[cover] = cover;
@@ -109,6 +182,13 @@
       <LibrarySource
         class={showedFilter === 1 ? "!inline-flex" : "hidden md:inline-flex"}
       />
+      <Button
+        variant="outline"
+        onclick={importMalXml}
+        title="Import MAL XML"
+      >
+        <Icon icon="lucide:upload" class="w-5 h-5" />
+      </Button>
       <Button
         class="md:hidden flex items-start !w-9"
         variant="secondary"
