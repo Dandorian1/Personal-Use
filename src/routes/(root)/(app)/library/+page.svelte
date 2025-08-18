@@ -28,6 +28,7 @@
   import { readTextFile } from "@tauri-apps/plugin-fs";
   import { toast } from "svelte-sonner";
   import Icon from "@iconify/svelte";
+  import { parseMalXml } from "@/lib/importMal";
 
   let libraryDiv: HTMLDivElement = $state(null!);
   let libdivWidth: number = $state(0);
@@ -53,50 +54,15 @@
     });
     if (!file) return;
     const content = await readTextFile(file as string);
-    const doc = new DOMParser().parseFromString(content, "application/xml");
-    const mangas = Array.from(doc.getElementsByTagName("manga"));
-    const statusMap: Record<string, string> = {
-      "1": "reading",
-      "2": "completed",
-      "3": "on hold",
-      "4": "dropped",
-      "6": "plan to read",
-    };
+    let favoritesFromXml: Favorite[];
+    try {
+      favoritesFromXml = await parseMalXml(content, $downloadManager);
+    } catch (e) {
+      toast.error("Invalid MAL XML");
+      return;
+    }
     let added = 0;
-    for (const m of mangas) {
-      const title = m.getElementsByTagName("series_title")[0]?.textContent?.trim();
-      const malId = m
-        .getElementsByTagName("series_animedb_id")[0]
-        ?.textContent?.trim();
-      if (!title || !malId) continue;
-      const grade = Number(
-        m.getElementsByTagName("my_score")[0]?.textContent || 0,
-      );
-      const status =
-        statusMap[m.getElementsByTagName("my_status")[0]?.textContent || ""] ??
-        "";
-      const favorite: Favorite = {
-        id: 0,
-        name: title,
-        folder_name: title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, ""),
-        link: `https://myanimelist.net/manga/${malId}`,
-        cover: "/myk.png",
-        source: "mal",
-        source_id: malId,
-        type: "manga",
-        extra_name: "",
-        title_color: "",
-        card_color: "",
-        grade,
-        author: "Unknown",
-        description: "",
-        status,
-        mal_id: malId,
-        anilist_id: "",
-      };
+    for (const favorite of favoritesFromXml) {
       try {
         await FavoriteDB.createFavorite(favorite);
         added++;
