@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "create-env": "bun scripts/create-env.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "bun test"
   },
   "dependencies": {
     "@neodrag/svelte": "^2.3.3",
